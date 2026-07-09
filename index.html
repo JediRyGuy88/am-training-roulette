@@ -102,6 +102,7 @@
     transition: color .15s, border-color .15s;
   }
   .reset:hover { color: var(--ink); border-color: var(--muted); }
+  .reset.armed { color: var(--gold); border-color: var(--gold); font-weight: 600; }
 
   .reveal {
     margin: 22px auto 0; max-width: 720px;
@@ -508,8 +509,22 @@
   el.wheelTopics.addEventListener("click", function(){ spinSingle(el.wheelTopics, "topics"); });
   el.removeName.addEventListener("change", function(){ state.removeName = el.removeName.checked; persist(); });
   el.removeTopic.addEventListener("change", function(){ state.removeTopic = el.removeTopic.checked; persist(); });
+  var resetArmed = false, resetTimer = null;
+  function disarmReset(){
+    resetArmed = false;
+    if(resetTimer){ clearTimeout(resetTimer); resetTimer = null; }
+    el.reset.textContent = "Reset everything";
+    el.reset.classList.remove("armed");
+  }
   el.reset.addEventListener("click", function(){
-    if(!confirm("Clear the board and put everyone and every module back on the wheels?")) return;
+    if(!resetArmed){
+      resetArmed = true;
+      el.reset.textContent = "Click again to confirm";
+      el.reset.classList.add("armed");
+      resetTimer = setTimeout(disarmReset, 3000);
+      return;
+    }
+    disarmReset();
     state.names = NAMES.slice();
     state.topics = TOPICS.slice();
     state.log = [];
