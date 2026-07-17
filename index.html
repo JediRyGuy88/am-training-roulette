@@ -103,6 +103,7 @@
   }
   .reset:hover { color: var(--ink); border-color: var(--muted); }
   .reset.armed { color: var(--gold); border-color: var(--gold); font-weight: 600; }
+  .newround:hover { color: var(--gold); border-color: var(--gold); }
 
   .reveal {
     margin: 22px auto 0; max-width: 720px;
@@ -198,10 +199,11 @@
   </div>
 
   <div class="controls">
-    <button class="spin-both" id="spinBoth">SPIN BOTH</button>
+    <button class="spin-both" id="spinBoth">SPIN THE WHEELS</button>
     <div class="toggles">
       <label class="toggle"><input type="checkbox" id="removeName" /> Retire a name once assigned</label>
       <label class="toggle"><input type="checkbox" id="removeTopic" /> Retire a module once assigned</label>
+      <button class="reset newround" id="newRound">New round · reset names</button>
       <button class="reset" id="reset">Reset everything</button>
     </div>
   </div>
@@ -285,6 +287,7 @@
     removeName: document.getElementById("removeName"),
     removeTopic: document.getElementById("removeTopic"),
     reset: document.getElementById("reset"),
+    newRound: document.getElementById("newRound"),
     reveal: document.getElementById("reveal"),
     log: document.getElementById("log"),
     boardCount: document.getElementById("boardCount")
@@ -327,16 +330,24 @@
       path.setAttribute("stroke","rgba(20,18,43,.55)"); path.setAttribute("stroke-width","1.5");
       disc.appendChild(path);
 
-      var labelR = n > 12 ? r-18 : r-44;
-      var lp = pt(cx,cy,labelR,mid);
       var txt=document.createElementNS(ns,"text");
-      txt.setAttribute("x",lp[0].toFixed(2)); txt.setAttribute("y",lp[1].toFixed(2));
       txt.setAttribute("text-anchor","middle"); txt.setAttribute("dominant-baseline","central");
       txt.setAttribute("fill","#fff"); txt.setAttribute("font-family","Space Grotesk, sans-serif");
-      txt.setAttribute("font-weight","700"); txt.setAttribute("font-size", fontSize);
-      txt.setAttribute("transform","rotate("+mid+" "+lp[0].toFixed(2)+" "+lp[1].toFixed(2)+")");
+      txt.setAttribute("font-weight","700");
       txt.setAttribute("style","paint-order:stroke;stroke:rgba(0,0,0,.28);stroke-width:2px;");
       txt.textContent = labelOf(items[i]);
+      if(n === 1){
+        txt.setAttribute("x", cx);
+        txt.setAttribute("y", cy + 46);
+        txt.setAttribute("font-size", (svg.id === "wheelNames") ? "26" : "22");
+      } else {
+        var labelR = n > 12 ? r-18 : r-44;
+        var lp = pt(cx,cy,labelR,mid);
+        var rot = (mid > 90 && mid < 270) ? mid + 180 : mid;  // keep bottom labels upright
+        txt.setAttribute("x",lp[0].toFixed(2)); txt.setAttribute("y",lp[1].toFixed(2));
+        txt.setAttribute("font-size", fontSize);
+        txt.setAttribute("transform","rotate("+rot+" "+lp[0].toFixed(2)+" "+lp[1].toFixed(2)+")");
+      }
       disc.appendChild(txt);
     }
     svg.appendChild(disc);
@@ -360,7 +371,7 @@
       if(n === 0){ resolve(-1); return; }
       var seg = 360/n;
       var idx = Math.floor(Math.random()*n);
-      var target = 360 - (idx*seg + seg/2);          // where slice center lands under the top pointer
+      var target = (n === 1) ? 0 : (360 - (idx*seg + seg/2));   // where slice center lands under the top pointer
       var current = state.rot[key];
       var curMod = ((current % 360) + 360) % 360;
       var delta = ((target - curMod) % 360 + 360) % 360;
@@ -379,7 +390,7 @@
   function setBusy(b){
     state.spinning = b;
     el.spinBoth.disabled = b;
-    el.spinBoth.textContent = b ? "SPINNING…" : "SPIN BOTH";
+    el.spinBoth.textContent = b ? "SPINNING…" : "SPIN THE WHEELS";
   }
 
   function spinBoth(){
@@ -532,6 +543,16 @@
     el.reveal.classList.remove("show");
     el.reveal.innerHTML = '<p class="reveal-empty">Give it a spin — the assignment shows up here.</p>';
     renderWheels(); renderLog(); persist();
+  });
+
+  el.newRound.addEventListener("click", function(){
+    if(state.spinning) return;
+    state.names = NAMES.slice();
+    state.rot.names = 0;
+    renderWheels();
+    flashReveal("New round — all " + NAMES.length + " names are back on the wheel. " +
+      state.topics.length + " module" + (state.topics.length === 1 ? "" : "s") + " left to assign.");
+    persist();
   });
 
   renderWheels();
