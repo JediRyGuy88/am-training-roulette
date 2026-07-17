@@ -203,6 +203,7 @@
     <div class="toggles">
       <label class="toggle"><input type="checkbox" id="removeName" /> Retire a name once assigned</label>
       <label class="toggle"><input type="checkbox" id="removeTopic" /> Retire a module once assigned</label>
+      <label class="toggle"><input type="checkbox" id="soundOn" checked /> Sound</label>
       <button class="reset newround" id="newRound">New round · reset names</button>
       <button class="reset" id="reset">Reset everything</button>
     </div>
@@ -266,6 +267,73 @@
   var PALETTE = ["#e8615a","#f2a541","#5bc0be","#6c7be0","#b36bd3","#4ea8de"];
   var VERBS = ["is on the hook for","takes","gets","is teaching","owns","draws"];
 
+  // Assign palette colors so no two neighbouring slices match, including the first/last wrap.
+  function buildColors(n){
+    var len = PALETTE.length, out = [];
+    for(var i=0;i<n;i++) out.push(i % len);
+    if(n > 1 && out[n-1] === out[0]){
+      var bad1 = out[0], bad2 = out[n-2];
+      for(var c=0;c<len;c++){ if(c!==bad1 && c!==bad2){ out[n-1]=c; break; } }
+    }
+    return out.map(function(k){ return PALETTE[k]; });
+  }
+
+  // Web Audio sound effects — synthesized, no external files.
+  var AudioFX = (function(){
+    var ctx = null, enabled = true;
+    function ac(){
+      try {
+        if(!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+        if(ctx && ctx.state === "suspended") ctx.resume();
+      } catch(e){ ctx = null; }
+      return ctx;
+    }
+    function tick(offset){
+      var c = ac(); if(!c) return;
+      var o = c.createOscillator(), g = c.createGain();
+      o.type = "square"; o.frequency.value = 880;
+      o.connect(g); g.connect(c.destination);
+      var t = c.currentTime + offset;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.06, t + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+      o.start(t); o.stop(t + 0.07);
+    }
+    function note(freq, offset, dur, gain){
+      var c = ac(); if(!c) return;
+      var o = c.createOscillator(), g = c.createGain();
+      o.type = "triangle"; o.frequency.value = freq;
+      o.connect(g); g.connect(c.destination);
+      var t = c.currentTime + offset;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(gain, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.start(t); o.stop(t + dur + 0.05);
+    }
+    return {
+      warm: function(){ ac(); },
+      isEnabled: function(){ return enabled; },
+      setEnabled: function(v){ enabled = v; },
+      spin: function(duration){
+        if(!enabled) return;
+        if(!ac()) return;
+        var t = 0, i = 0;
+        while(t < duration && i < 60){
+          var frac = t / duration;
+          tick(t);
+          t += 0.045 + frac * frac * 0.34;   // ticks space out as the wheel slows
+          i++;
+        }
+      },
+      land: function(){
+        if(!enabled) return;
+        note(523.25, 0,    0.45, 0.22);  // C
+        note(659.25, 0.09, 0.45, 0.20);  // E
+        note(783.99, 0.18, 0.55, 0.20);  // G
+      }
+    };
+  })();
+
   // ---- state ----
   var state = {
     names: NAMES.slice(),
@@ -286,6 +354,7 @@
     spinBoth: document.getElementById("spinBoth"),
     removeName: document.getElementById("removeName"),
     removeTopic: document.getElementById("removeTopic"),
+    soundOn: document.getElementById("soundOn"),
     reset: document.getElementById("reset"),
     newRound: document.getElementById("newRound"),
     reveal: document.getElementById("reveal"),
@@ -294,6 +363,11 @@
   };
   el.removeName.checked = state.removeName;
   el.removeTopic.checked = state.removeTopic;
+  el.soundOn.checked = AudioFX.isEnabled();
+  el.soundOn.addEventListener("change", function(){
+    AudioFX.setEnabled(el.soundOn.checked);
+    if(el.soundOn.checked) AudioFX.warm();
+  });
 
   // ---- geometry ----
   function pt(cx, cy, r, deg){
@@ -322,11 +396,12 @@
       disc.appendChild(t); svg.appendChild(disc); return;
     }
     var seg = 360/n;
+    var colors = buildColors(n);
     for(var i=0;i<n;i++){
       var a0=i*seg, a1=(i+1)*seg, mid=a0+seg/2;
       var path=document.createElementNS(ns,"path");
       path.setAttribute("d", slicePath(cx,cy,r,a0,a1));
-      path.setAttribute("fill", PALETTE[i % PALETTE.length]);
+      path.setAttribute("fill", colors[i]);
       path.setAttribute("stroke","rgba(20,18,43,.55)"); path.setAttribute("stroke-width","1.5");
       disc.appendChild(path);
 
@@ -400,10 +475,12 @@
       return;
     }
     setBusy(true);
+    AudioFX.spin(4.3);
     Promise.all([
       spinOne(el.wheelNames, state.names, "names"),
       spinOne(el.wheelTopics, state.topics, "topics")
     ]).then(function(res){
+      AudioFX.land();
       var name = state.names[res[0]];
       var topic = state.topics[res[1]];
       recordAssignment(name, topic);
@@ -416,9 +493,11 @@
     var items = (key === "names") ? state.names : state.topics;
     if(items.length === 0) return;
     setBusy(true);
+    AudioFX.spin(4.3);
     spinOne(svg, items, key).then(function(idx){
       setBusy(false);
       if(idx < 0) return;
+      AudioFX.land();
       if(key === "topics") showTopicOnly(items[idx]);
       else showNameOnly(items[idx]);
     });
